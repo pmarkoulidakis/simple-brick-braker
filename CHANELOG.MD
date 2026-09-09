@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.2.0] - 2026-09-09
+### Fixed
+- **Refresh Rate & Game Speed Consistency**:
+  - Implemented a fixed-timestep accumulator loop (60 updates/sec) in `gameLoop`.
+  - Decoupled game physics and movement from display refresh rates and browser `requestAnimationFrame` timing.
+  - Resolved hyperspeed gameplay issues on Chrome and high refresh rate monitors (120Hz, 144Hz, 240Hz+).
+  - Added elapsed time clamping to prevent spiral-of-death catch-up loops when tab is unfocused or backgrounded.
+
+---
+
 ## [1.1.0] - 2026-09-09
 ### Added
 - **Power-Up System**:

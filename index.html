@@ -164,6 +164,8 @@
       effects.slowUntil = 0;
       effects.laserUntil = 0;
 
+      accumulator = 0;
+
       createBricks();
       resetBall();
     }
@@ -597,8 +599,29 @@
       }
     }
 
+    let lastTime = 0;
+    let accumulator = 0;
+    const STEP = 1000 / 60;
+
     function gameLoop(now) {
-      update(now);
+      if (!lastTime) {
+        lastTime = now;
+      }
+      let elapsed = now - lastTime;
+      lastTime = now;
+
+      // Cap max elapsed time to prevent spiral of death on tab switch or lag spikes
+      if (elapsed > 200) {
+        elapsed = 200;
+      }
+
+      accumulator += elapsed;
+
+      while (accumulator >= STEP) {
+        update(now);
+        accumulator -= STEP;
+      }
+
       draw(now);
       requestAnimationFrame(gameLoop);
     }
