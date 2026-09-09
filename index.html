@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple Brick Braker</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #222;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    .game {
+      text-align: center;
+    }
+
+    canvas {
+      display: block;
+      background: #111;
+      border: 2px solid white;
+      max-width: calc(100vw - 24px);
+      height: auto;
+    }
+
+    p {
+      margin: 10px 0 0;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game">
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <p>Move with ← → or A/D. Press Space to restart.</p>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const paddle = {
+      width: 90,
+      height: 12,
+      x: 255,
+      y: 370,
+      speed: 7
+    };
+
+    const ball = {
+      x: 300,
+      y: 340,
+      radius: 7,
+      dx: 4,
+      dy: -4
+    };
+
+    const brick = {
+      rows: 5,
+      columns: 9,
+      width: 55,
+      height: 18,
+      gap: 7,
+      top: 45,
+      left: 23
+    };
+
+    let bricks = [];
+    let score = 0;
+    let gameOver = false;
+    let won = false;
+
+    const keys = {
+      left: false,
+      right: false
+    };
+
+    function createBricks() {
+      bricks = [];
+
+      for (let row = 0; row < brick.rows; row++) {
+        for (let column = 0; column < brick.columns; column++) {
+          bricks.push({
+            x: brick.left + column * (brick.width + brick.gap),
+            y: brick.top + row * (brick.height + brick.gap),
+            active: true
+          });
+        }
+      }
+    }
+
+    function resetGame() {
+      paddle.x = (canvas.width - paddle.width) / 2;
+
+      ball.x = canvas.width / 2;
+      ball.y = 340;
+      ball.dx = Math.random() > 0.5 ? 4 : -4;
+      ball.dy = -4;
+
+      score = 0;
+      gameOver = false;
+      won = false;
+
+      createBricks();
+    }
+
+    function update() {
+      if (gameOver || won) return;
+
+      if (keys.left) {
+        paddle.x -= paddle.speed;
+      }
+
+      if (keys.right) {
+        paddle.x += paddle.speed;
+      }
+
+      paddle.x = Math.max(
+        0,
+        Math.min(canvas.width - paddle.width, paddle.x)
+      );
+
+      ball.x += ball.dx;
+      ball.y += ball.dy;
+
+      // Left and right walls
+      if (
+        ball.x - ball.radius <= 0 ||
+        ball.x + ball.radius >= canvas.width
+      ) {
+        ball.dx *= -1;
+      }
+
+      // Ceiling
+      if (ball.y - ball.radius <= 0) {
+        ball.dy = Math.abs(ball.dy);
+      }
+
+      // Paddle collision
+      if (
+        ball.dy > 0 &&
+        ball.y + ball.radius >= paddle.y &&
+        ball.y - ball.radius <= paddle.y + paddle.height &&
+        ball.x >= paddle.x &&
+        ball.x <= paddle.x + paddle.width
+      ) {
+        ball.y = paddle.y - ball.radius;
+        ball.dy = -Math.abs(ball.dy);
+
+        // Change horizontal direction based on where the ball hits.
+        const hitPosition =
+          (ball.x - (paddle.x + paddle.width / 2)) /
+          (paddle.width / 2);
+
+        ball.dx = hitPosition * 5;
+      }
+
+      // Brick collision
+      for (const item of bricks) {
+        if (
+          item.active &&
+          ball.x + ball.radius > item.x &&
+          ball.x - ball.radius < item.x + brick.width &&
+          ball.y + ball.radius > item.y &&
+          ball.y - ball.radius < item.y + brick.height
+        ) {
+          item.active = false;
+          ball.dy *= -1;
+          score++;
+
+          if (score === bricks.length) {
+            won = true;
+          }
+
+          break;
+        }
+      }
+
+      // Ball went below the screen
+      if (ball.y - ball.radius > canvas.height) {
+        gameOver = true;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Paddle
+      ctx.fillStyle = "white";
+      ctx.fillRect(
+        paddle.x,
+        paddle.y,
+        paddle.width,
+        paddle.height
+      );
+
+      // Ball
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bricks
+      ctx.fillStyle = "#3fa9f5";
+
+      for (const item of bricks) {
+        if (item.active) {
+          ctx.fillRect(
+            item.x,
+            item.y,
+            brick.width,
+            brick.height
+          );
+        }
+      }
+
+      // Score
+      ctx.fillStyle = "white";
+      ctx.font = "16px Arial";
+      ctx.fillText(`Score: ${score}`, 10, 24);
+
+      if (gameOver || won) {
+        ctx.textAlign = "center";
+        ctx.font = "32px Arial";
+        ctx.fillText(
+          won ? "You win!" : "Game over",
+          canvas.width / 2,
+          canvas.height / 2
+        );
+
+        ctx.font = "16px Arial";
+        ctx.fillText(
+          "Press Space to restart",
+          canvas.width / 2,
+          canvas.height / 2 + 35
+        );
+
+        ctx.textAlign = "left";
+      }
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
+        keys.left = true;
+      }
+
+      if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
+        keys.right = true;
+      }
+
+      if (event.code === "Space" && (gameOver || won)) {
+        resetGame();
+      }
+    });
+
+    document.addEventListener("keyup", event => {
+      if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
+        keys.left = false;
+      }
+
+      if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
+        keys.right = false;
+      }
+    });
+
+    resetGame();
+    gameLoop();
+  </script>
+</body>
+</html>
