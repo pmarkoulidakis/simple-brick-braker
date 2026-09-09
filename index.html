@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Simple Brick Braker</title>
+
   <style>
     body {
       margin: 0;
@@ -33,17 +34,24 @@
     }
   </style>
 </head>
+
 <body>
   <div class="game">
     <canvas id="gameCanvas" width="600" height="400"></canvas>
-    <p>Move with ← → or A/D. Press Space to restart.</p>
+    <p>
+      Move with ← → or A/D. Press X to shoot when lasers are active.
+      Press Space to restart.
+    </p>
   </div>
 
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
+    const POWER_UP_DROP_CHANCE = 0.25;
+
     const paddle = {
+      normalWidth: 90,
       width: 90,
       height: 12,
       x: 255,
@@ -69,14 +77,33 @@
       left: 23
     };
 
-    let bricks = [];
-    let score = 0;
-    let gameOver = false;
-    let won = false;
-
     const keys = {
       left: false,
-      right: false
+      right: false,
+      shoot: false
+    };
+
+    let bricks = [];
+    let powerUps = [];
+    let laserShots = [];
+
+    let score = 0;
+    let lives = 3;
+    let gameOver = false;
+    let won = false;
+    let lastLaserShot = 0;
+
+    const effects = {
+      wideUntil: 0,
+      slowUntil: 0,
+      laserUntil: 0
+    };
+
+    const rarityColors = {
+      COMMON: "#bfc5cc",
+      UNCOMMON: "#46d369",
+      LEGENDARY: "#ff9d00",
+      EPIC: "#b45cff"
     };
 
     function createBricks() {
@@ -84,32 +111,232 @@
 
       for (let row = 0; row < brick.rows; row++) {
         for (let column = 0; column < brick.columns; column++) {
+          const random = Math.random();
+
+          let type = "blue";
+          let color = "#3fa9f5";
+          let points = 1;
+
+          // Red: 8%, Yellow: 12%, Blue: 80%
+          if (random < 0.08) {
+            type = "red";
+            color = "#ff3b3b";
+            points = 20;
+          } else if (random < 0.20) {
+            type = "yellow";
+            color = "#ffd83d";
+            points = 10;
+          }
+
           bricks.push({
             x: brick.left + column * (brick.width + brick.gap),
             y: brick.top + row * (brick.height + brick.gap),
-            active: true
+            active: true,
+            type,
+            color,
+            points
           });
         }
       }
     }
 
-    function resetGame() {
+    function resetBall() {
       paddle.x = (canvas.width - paddle.width) / 2;
 
       ball.x = canvas.width / 2;
       ball.y = 340;
       ball.dx = Math.random() > 0.5 ? 4 : -4;
       ball.dy = -4;
+    }
+
+    function resetGame() {
+      paddle.width = paddle.normalWidth;
 
       score = 0;
+      lives = 3;
       gameOver = false;
       won = false;
 
+      powerUps = [];
+      laserShots = [];
+
+      effects.wideUntil = 0;
+      effects.slowUntil = 0;
+      effects.laserUntil = 0;
+
       createBricks();
+      resetBall();
     }
 
-    function update() {
+    function choosePowerUp() {
+      const chance = Math.random() * 100;
+
+      // Exact rarity distribution:
+      // Common 50%, Uncommon 25%, Legendary 20%, Epic 5%
+      if (chance < 50) {
+        return {
+          type: "wide",
+          rarity: "COMMON",
+          label: "W"
+        };
+      }
+
+      if (chance < 75) {
+        return {
+          type: "life",
+          rarity: "UNCOMMON",
+          label: "+1"
+        };
+      }
+
+      if (chance < 95) {
+        return {
+          type: "slow",
+          rarity: "LEGENDARY",
+          label: "S"
+        };
+      }
+
+      return {
+        type: "laser",
+        rarity: "EPIC",
+        label: "L"
+      };
+    }
+
+    function dropPowerUp(x, y) {
+      if (Math.random() > POWER_UP_DROP_CHANCE) return;
+
+      const selected = choosePowerUp();
+
+      powerUps.push({
+        x,
+        y,
+        width: 28,
+        height: 16,
+        speed: 2,
+        ...selected
+      });
+    }
+
+    function destroyBrick(item) {
+      if (!item.active) return;
+
+      item.active = false;
+      score += item.points;
+
+      dropPowerUp(
+        item.x + brick.width / 2,
+        item.y + brick.height / 2
+      );
+
+      if (bricks.every(currentBrick => !currentBrick.active)) {
+        won = true;
+      }
+    }
+
+    function extendEffect(effectName, duration, now) {
+      effects[effectName] =
+        Math.max(now, effects[effectName]) + duration;
+    }
+
+    function activatePowerUp(powerUp, now) {
+      if (powerUp.type === "wide") {
+        extendEffect("wideUntil", 10000, now);
+      }
+
+      if (powerUp.type === "life") {
+        lives++;
+      }
+
+      if (powerUp.type === "slow") {
+        extendEffect("slowUntil", 10000, now);
+      }
+
+      if (powerUp.type === "laser") {
+        extendEffect("laserUntil", 12000, now);
+      }
+    }
+
+    function fireLasers(now) {
+      const lasersActive = now < effects.laserUntil;
+
+      if (!lasersActive || !keys.shoot) return;
+      if (now - lastLaserShot < 300) return;
+
+      lastLaserShot = now;
+
+      laserShots.push(
+        {
+          x: paddle.x + 6,
+          y: paddle.y,
+          width: 4,
+          height: 12
+        },
+        {
+          x: paddle.x + paddle.width - 10,
+          y: paddle.y,
+          width: 4,
+          height: 12
+        }
+      );
+    }
+
+    function updateLaserShots() {
+      for (const shot of laserShots) {
+        shot.y -= 9;
+
+        for (const item of bricks) {
+          if (
+            item.active &&
+            shot.x + shot.width > item.x &&
+            shot.x < item.x + brick.width &&
+            shot.y + shot.height > item.y &&
+            shot.y < item.y + brick.height
+          ) {
+            destroyBrick(item);
+            shot.remove = true;
+            break;
+          }
+        }
+
+        if (shot.y + shot.height < 0) {
+          shot.remove = true;
+        }
+      }
+
+      laserShots = laserShots.filter(shot => !shot.remove);
+    }
+
+    function updatePowerUps(now) {
+      for (const powerUp of powerUps) {
+        powerUp.y += powerUp.speed;
+
+        if (
+          powerUp.x + powerUp.width / 2 > paddle.x &&
+          powerUp.x - powerUp.width / 2 < paddle.x + paddle.width &&
+          powerUp.y + powerUp.height > paddle.y &&
+          powerUp.y < paddle.y + paddle.height
+        ) {
+          activatePowerUp(powerUp, now);
+          powerUp.remove = true;
+        }
+
+        if (powerUp.y > canvas.height) {
+          powerUp.remove = true;
+        }
+      }
+
+      powerUps = powerUps.filter(powerUp => !powerUp.remove);
+    }
+
+    function update(now) {
       if (gameOver || won) return;
+
+      const wideActive = now < effects.wideUntil;
+      const slowActive = now < effects.slowUntil;
+
+      paddle.width = wideActive ? 140 : paddle.normalWidth;
 
       if (keys.left) {
         paddle.x -= paddle.speed;
@@ -124,19 +351,29 @@
         Math.min(canvas.width - paddle.width, paddle.x)
       );
 
-      ball.x += ball.dx;
-      ball.y += ball.dy;
+      fireLasers(now);
+      updateLaserShots();
+      updatePowerUps(now);
 
-      // Left and right walls
-      if (
-        ball.x - ball.radius <= 0 ||
-        ball.x + ball.radius >= canvas.width
-      ) {
-        ball.dx *= -1;
+      const ballSpeedMultiplier = slowActive ? 0.6 : 1;
+
+      ball.x += ball.dx * ballSpeedMultiplier;
+      ball.y += ball.dy * ballSpeedMultiplier;
+
+      // Side walls
+      if (ball.x - ball.radius <= 0) {
+        ball.x = ball.radius;
+        ball.dx = Math.abs(ball.dx);
+      }
+
+      if (ball.x + ball.radius >= canvas.width) {
+        ball.x = canvas.width - ball.radius;
+        ball.dx = -Math.abs(ball.dx);
       }
 
       // Ceiling
       if (ball.y - ball.radius <= 0) {
+        ball.y = ball.radius;
         ball.dy = Math.abs(ball.dy);
       }
 
@@ -151,12 +388,16 @@
         ball.y = paddle.y - ball.radius;
         ball.dy = -Math.abs(ball.dy);
 
-        // Change horizontal direction based on where the ball hits.
         const hitPosition =
           (ball.x - (paddle.x + paddle.width / 2)) /
           (paddle.width / 2);
 
         ball.dx = hitPosition * 5;
+
+        // Prevent an almost perfectly vertical bounce.
+        if (Math.abs(ball.dx) < 1) {
+          ball.dx = ball.dx < 0 ? -1 : 1;
+        }
       }
 
       // Brick collision
@@ -168,28 +409,27 @@
           ball.y + ball.radius > item.y &&
           ball.y - ball.radius < item.y + brick.height
         ) {
-          item.active = false;
+          destroyBrick(item);
           ball.dy *= -1;
-          score++;
-
-          if (score === bricks.length) {
-            won = true;
-          }
-
           break;
         }
       }
 
-      // Ball went below the screen
+      // Ball missed
       if (ball.y - ball.radius > canvas.height) {
-        gameOver = true;
+        lives--;
+
+        if (lives <= 0) {
+          gameOver = true;
+        } else {
+          resetBall();
+        }
       }
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function drawPaddle(now) {
+      const lasersActive = now < effects.laserUntil;
 
-      // Paddle
       ctx.fillStyle = "white";
       ctx.fillRect(
         paddle.x,
@@ -198,17 +438,97 @@
         paddle.height
       );
 
-      // Ball
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-      ctx.fill();
+      if (lasersActive) {
+        ctx.fillStyle = rarityColors.EPIC;
+
+        // Shooting edges
+        ctx.fillRect(paddle.x + 2, paddle.y - 9, 8, 12);
+        ctx.fillRect(
+          paddle.x + paddle.width - 10,
+          paddle.y - 9,
+          8,
+          12
+        );
+      }
+    }
+
+    function drawPowerUps() {
+      for (const powerUp of powerUps) {
+        const left = powerUp.x - powerUp.width / 2;
+
+        ctx.fillStyle = rarityColors[powerUp.rarity];
+        ctx.fillRect(
+          left,
+          powerUp.y,
+          powerUp.width,
+          powerUp.height
+        );
+
+        ctx.strokeStyle = "white";
+        ctx.strokeRect(
+          left,
+          powerUp.y,
+          powerUp.width,
+          powerUp.height
+        );
+
+        ctx.fillStyle = "#111";
+        ctx.font = "bold 10px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          powerUp.label,
+          powerUp.x,
+          powerUp.y + 12
+        );
+      }
+
+      ctx.textAlign = "left";
+    }
+
+    function drawEffects(now) {
+      const activeEffects = [];
+
+      if (now < effects.wideUntil) {
+        activeEffects.push("Wide paddle");
+      }
+
+      if (now < effects.slowUntil) {
+        activeEffects.push("Slow ball");
+      }
+
+      if (now < effects.laserUntil) {
+        activeEffects.push("Lasers: press X");
+      }
+
+      if (activeEffects.length > 0) {
+        ctx.fillStyle = "#ddd";
+        ctx.font = "13px Arial";
+        ctx.textAlign = "right";
+        ctx.fillText(
+          activeEffects.join(" | "),
+          canvas.width - 10,
+          24
+        );
+        ctx.textAlign = "left";
+      }
+    }
+
+    function draw(now) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Bricks
-      ctx.fillStyle = "#3fa9f5";
-
       for (const item of bricks) {
         if (item.active) {
+          ctx.fillStyle = item.color;
           ctx.fillRect(
+            item.x,
+            item.y,
+            brick.width,
+            brick.height
+          );
+
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+          ctx.strokeRect(
             item.x,
             item.y,
             brick.width,
@@ -217,12 +537,41 @@
         }
       }
 
-      // Score
+      drawPaddle(now);
+
+      // Ball
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Laser shots
+      ctx.fillStyle = "#ff4dff";
+
+      for (const shot of laserShots) {
+        ctx.fillRect(
+          shot.x,
+          shot.y,
+          shot.width,
+          shot.height
+        );
+      }
+
+      drawPowerUps();
+
+      // Score and lives
       ctx.fillStyle = "white";
       ctx.font = "16px Arial";
       ctx.fillText(`Score: ${score}`, 10, 24);
+      ctx.fillText(`Lives: ${lives}`, 10, 43);
+
+      drawEffects(now);
 
       if (gameOver || won) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "white";
         ctx.textAlign = "center";
         ctx.font = "32px Arial";
         ctx.fillText(
@@ -233,28 +582,48 @@
 
         ctx.font = "16px Arial";
         ctx.fillText(
+          `Final score: ${score}`,
+          canvas.width / 2,
+          canvas.height / 2 + 30
+        );
+
+        ctx.fillText(
           "Press Space to restart",
           canvas.width / 2,
-          canvas.height / 2 + 35
+          canvas.height / 2 + 58
         );
 
         ctx.textAlign = "left";
       }
     }
 
-    function gameLoop() {
-      update();
-      draw();
+    function gameLoop(now) {
+      update(now);
+      draw(now);
       requestAnimationFrame(gameLoop);
     }
 
     document.addEventListener("keydown", event => {
-      if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
+      const key = event.key.toLowerCase();
+
+      if (
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowRight" ||
+        event.code === "Space"
+      ) {
+        event.preventDefault();
+      }
+
+      if (event.key === "ArrowLeft" || key === "a") {
         keys.left = true;
       }
 
-      if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
+      if (event.key === "ArrowRight" || key === "d") {
         keys.right = true;
+      }
+
+      if (key === "x") {
+        keys.shoot = true;
       }
 
       if (event.code === "Space" && (gameOver || won)) {
@@ -263,17 +632,23 @@
     });
 
     document.addEventListener("keyup", event => {
-      if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
+      const key = event.key.toLowerCase();
+
+      if (event.key === "ArrowLeft" || key === "a") {
         keys.left = false;
       }
 
-      if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
+      if (event.key === "ArrowRight" || key === "d") {
         keys.right = false;
+      }
+
+      if (key === "x") {
+        keys.shoot = false;
       }
     });
 
     resetGame();
-    gameLoop();
+    requestAnimationFrame(gameLoop);
   </script>
 </body>
 </html>
