@@ -3,6 +3,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-09-09
+### Added
+- **Dynamic Combo Multiplier System**:
+  - Chaining brick breaks without hitting the paddle builds an active combo streak with scaling multipliers (`x2`, `x3`, `x4`, up to `x5`).
+  - Added dynamic pitch-scaling audio feedback on consecutive brick hits and destruction.
+  - Added on-screen fiery combo badge and floating score tags (`+40 (2X!)`).
+- **TNT & Titanium Brick Mechanics**:
+  - Added **TNT Explosive Bricks** that trigger a radial 3x3 chain detonation damaging adjacent bricks with custom explosions and heavy screen shake.
+  - Added **Titanium Bricks** functioning as indestructible metallic obstacles with glancing spark physics, destructible only via the Fireball power-up.
+- **Fireball & Safety Shield Power-Ups**:
+  - Added **Fireball** (`F` - Flame Red tier) that engulfs the ball in fiery embers and punches straight through bricks without deflecting.
+  - Added **Safety Shield** (`B` - Cyan Barrier tier) that deploys a glowing bottom laser floor to catch and rebound dropped balls.
+- **Procedural 8-Bit Chiptune BGM**:
+  - Built-in zero-dependency 16-step arpeggiated retro bassline synthesizer generated via the Web Audio API.
+  - Added `B` keyboard shortcut and interactive HUD click toggle for music playback.
+- **Trajectory Aim Guide**:
+  - Added a predictive dashed trajectory line and target reticle when a ball is docked on the paddle.
+- **Stage 4: The Demolition Citadel**:
+  - Handcrafted master stage combining layered titanium defenses, TNT chains, silver reinforcements, and high-value targets.
+
+---
+
 ## [2.0.0] - 2026-09-09
 ### Added
 - **Web Audio Sound Effects Synthesizer**:
